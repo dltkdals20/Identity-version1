@@ -85,6 +85,88 @@ const Copy = (props) => (
   </Icon>
 );
 
+const generateCaptchaCode = () =>
+  Array.from({ length: 6 }, () => Math.floor(Math.random() * 10)).join('');
+
+const CHAR_ROTATIONS = [-12, 8, -6, 10, -8, 5];
+const CHAR_SIZES = [38, 34, 40, 36, 38, 34];
+const CHAR_Y = [28, 32, 26, 30, 28, 33];
+
+function CaptchaDisplay({ code, onRefresh, captchaInput, setCaptchaInput, captchaError, setCaptchaError }) {
+  const W = 180;
+  const H = 60;
+
+  return (
+    <div className="flex items-center gap-2">
+      <div
+        className="rounded-lg border border-gray-300 bg-gray-100 select-none overflow-hidden shrink-0"
+        aria-label="보안문자 이미지"
+      >
+        <svg width={W} height={H} xmlns="http://www.w3.org/2000/svg">
+          <rect width={W} height={H} fill="#e8e8e8" />
+          {/* noise lines */}
+          <line x1="5" y1="38" x2={W - 5} y2="22" stroke="#111" strokeWidth="2" />
+          <line x1="5" y1="18" x2={W - 10} y2="50" stroke="#111" strokeWidth="1.5" />
+          <line x1="15" y1="55" x2={W - 15} y2="8" stroke="#555" strokeWidth="1" />
+          {/* characters */}
+          {code.split('').map((char, i) => {
+            const x = 16 + i * 27;
+            const y = CHAR_Y[i];
+            const rotate = CHAR_ROTATIONS[i];
+            const size = CHAR_SIZES[i];
+            return (
+              <text
+                key={i}
+                x={x}
+                y={y}
+                fontSize={size}
+                fontWeight="900"
+                fontFamily="Arial Black, Arial, sans-serif"
+                fill="#111"
+                transform={`rotate(${rotate}, ${x}, ${y})`}
+                style={{ userSelect: 'none' }}
+              >
+                {char}
+              </text>
+            );
+          })}
+        </svg>
+      </div>
+
+      <button
+        type="button"
+        onClick={onRefresh}
+        className="p-2.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 hover:border-gray-400 transition-all text-gray-500 hover:text-gray-700 shrink-0"
+        title="보안문자 새로고침"
+        aria-label="보안문자 새로고침"
+      >
+        <RefreshCw size={16} />
+      </button>
+
+      <input
+        type="text"
+        value={captchaInput}
+        onChange={(e) => {
+          const val = e.target.value.replace(/[^0-9]/g, '');
+          if (val.length <= 6) {
+            setCaptchaInput(val);
+            if (captchaError) setCaptchaError(false);
+          }
+        }}
+        placeholder="보안문자 입력"
+        className={`flex-1 min-w-0 px-3 py-2.5 rounded-lg border outline-none text-center tracking-widest font-bold text-lg transition-all focus:ring-2 ${
+          captchaError
+            ? 'border-red-300 focus:border-red-500 focus:ring-red-200 bg-red-50'
+            : 'border-gray-300 focus:border-blue-500 focus:ring-blue-200'
+        }`}
+        maxLength={6}
+        autoComplete="off"
+        inputMode="numeric"
+      />
+    </div>
+  );
+}
+
 export default function App() {
   const [step, setStep] = useState('carrier'); // carrier, input, verify, success
 
@@ -94,6 +176,11 @@ export default function App() {
   const [rrnSecond, setRrnSecond] = useState('');
   const [carrier, setCarrier] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
+
+  // Captcha States
+  const [captchaCode, setCaptchaCode] = useState(() => generateCaptchaCode());
+  const [captchaInput, setCaptchaInput] = useState('');
+  const [captchaError, setCaptchaError] = useState(false);
 
   // Verification States
   const [verifyCode, setVerifyCode] = useState('');
@@ -112,7 +199,19 @@ export default function App() {
     { id: 'budget', name: '알뜰폰' },
   ];
 
+  const refreshCaptcha = () => {
+    setCaptchaCode(generateCaptchaCode());
+    setCaptchaInput('');
+    setCaptchaError(false);
+  };
+
   const sendMockSMS = () => {
+    if (captchaInput.toUpperCase() !== captchaCode) {
+      setCaptchaError(true);
+      refreshCaptcha();
+      return;
+    }
+    setCaptchaError(false);
     setIsLoading(true);
     setError('');
     setCopyFeedback(false);
@@ -221,13 +320,17 @@ export default function App() {
     setError('');
     setNotification(null);
     setCopyFeedback(false);
+    setCaptchaCode(generateCaptchaCode());
+    setCaptchaInput('');
+    setCaptchaError(false);
   };
 
   const isFormValid =
     name.length > 0 &&
     rrnFirst.length === 6 &&
     rrnSecond.length === 1 &&
-    phoneNumber.length >= 10;
+    phoneNumber.length >= 10 &&
+    captchaInput.length === 6;
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center font-sans">
@@ -368,6 +471,26 @@ export default function App() {
                       maxLength={13}
                     />
                     <Smartphone className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">보안문자 입력</label>
+                  <div className="space-y-1.5">
+                    <CaptchaDisplay
+                      code={captchaCode}
+                      onRefresh={refreshCaptcha}
+                      captchaInput={captchaInput}
+                      setCaptchaInput={setCaptchaInput}
+                      captchaError={captchaError}
+                      setCaptchaError={setCaptchaError}
+                    />
+                    {captchaError && (
+                      <div className="flex items-center gap-2 text-red-500 text-sm px-1 animate-shake">
+                        <AlertCircle size={16} />
+                        <span>보안문자가 일치하지 않습니다. 다시 입력해주세요.</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
